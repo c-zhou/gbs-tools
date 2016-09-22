@@ -17,7 +17,7 @@
     <property name="build" location="build"/>
     <property name="lib" location="lib"/>
     
-    <property name="gbs" location="${dist}\gbs.1.0.jar"/>
+    <property name="gbs" location="${dist}\gbs.jar"/>
     
     <path id="build.class.path">
         <fileset dir="${lib}">

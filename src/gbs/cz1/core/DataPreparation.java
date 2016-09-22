@@ -1,7 +1,6 @@
-package gbs.cz1.appl;
+package gbs.cz1.core;
 
 import gbs.cz1.util.ArgsEngine;
-import gbs.cz1.util.Utils;
 
 import java.io.File;
 import java.io.FileReader;

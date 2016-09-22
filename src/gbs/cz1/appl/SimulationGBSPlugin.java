@@ -36,7 +36,7 @@ import java.util.Collections;
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 
-public class SimulationGBS {
+public class SimulationGBSPlugin {
 
 	private final static Logger myLogger = 
 			Logger.getLogger(DataPreparation.class);
@@ -208,11 +208,11 @@ public class SimulationGBS {
 	}
 	
 	public static void main(String[] args) {
-		SimulationGBS sim = new SimulationGBS(args);
+		SimulationGBSPlugin sim = new SimulationGBSPlugin(args);
 		sim.simulate();
 	}
 
-	public SimulationGBS(String[] args) {
+	public SimulationGBSPlugin(String[] args) {
 		setParameters(args);
 		/***
         meanDepth = 6.0;

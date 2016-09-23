@@ -16,6 +16,15 @@ import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import net.sf.samtools.SAMFileHeader;
+import net.sf.samtools.SAMFileReader;
+import net.sf.samtools.SAMFileWriter;
+import net.sf.samtools.SAMFileWriterFactory;
+import net.sf.samtools.SAMRecord;
+import net.sf.samtools.SAMRecordIterator;
+import net.sf.samtools.SAMFileHeader.SortOrder;
+import net.sf.samtools.SAMFileReader.ValidationStringency;
+
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 
@@ -43,9 +52,9 @@ public class SamToTaxaPlugin {
 	private void printUsage() {
 		myLogger.info(
 				"\n\nUsage is as follows:\n"
-						+ " -s  Input sam file.\n\n"
+						+ " -s  Input sam/bam file.\n\n"
 						+ " -t  Threads (default is 1).\n\n"
-						+ " -S	The sam file is sorted.\n\n" 
+						+ " -S	The sam/bam file is sorted.\n\n" 
 						+ " -o  Output directory to contain .cnt files (one per FASTQ file, defaults to input directory).\n\n"
 						+ " -i  Tag index file.");
 	}
@@ -118,8 +127,10 @@ public class SamToTaxaPlugin {
 		}
 	}
 
-	private final static Map<String, BufferedWriter> writers = 
+	private final static Map<String, BufferedWriter> sam_writers = 
 			new HashMap<String, BufferedWriter>();
+	private final static Map<String, SAMFileWriter> bam_writers = 
+			new HashMap<String, SAMFileWriter>();
 	private final static Map<Integer, Tag> indexMap = 
 			new ConcurrentHashMap<Integer, Tag>();
 	private static BufferedReader indexReader = null;
@@ -129,7 +140,8 @@ public class SamToTaxaPlugin {
 	private static ExecutorService executor;
 	private static int allReads = 0;
 	private BlockingQueue<Runnable> tasks = null;
-	private static String header = null;
+	private static String header_str = null;
+	private static SAMFileHeader header_sam = null;
 	private static int is = 0;
 	
 	public void start() {
@@ -155,12 +167,24 @@ public class SamToTaxaPlugin {
 	}
 
 	public void distributeTags() {
-		if(this.mySamIsSorted) 
-			distributeSortedTags();
+		if(this.mySamIsSorted)
+			if(this.mySamFileName.endsWith(".sam"))
+				distributeSortedSam();
+			else if(this.mySamFileName.endsWith(".bam"))
+				distributeSortedBam();
+			else
+				throw new RuntimeException(
+						"input file should be sorted sam or bam file.");
 		else
-			distributeUnsortedTags();
+			if(this.mySamFileName.endsWith(".sam"))
+				distributeUnsortedSam();
+			else if(this.mySamFileName.endsWith(".bam"))
+				distributeUnsortedBam();
+			else
+				throw new RuntimeException(
+						"input file should be sam or bam file.");
 	}
-
+	
 	private void cache() {
 		// TODO Auto-generated method stub
 		try {
@@ -218,8 +242,127 @@ public class SamToTaxaPlugin {
 			e.printStackTrace();
 		}
 	}
+	
+	private void distributeSortedBam() {
+		// TODO Auto-generated method stub
+		long start = System.currentTimeMillis();
+		try {
+			File indexFile = new File(myIndexFileName);
+			myLogger.info("Using the following index file:");
+			myLogger.info(indexFile.getAbsolutePath());
+			File samFile = new File(mySamFileName);
+			myLogger.info("Using the following BAM file:");
+			myLogger.info(samFile.getAbsolutePath());
 
-	private void distributeSortedTags() {
+			indexReader = Utils.getBufferedReader(indexFile, 65536);
+			final SAMFileReader inputSam = new SAMFileReader(samFile);
+			header_sam = inputSam.getFileHeader();
+			header_sam.setSortOrder(SortOrder.unsorted);
+			inputSam.setValidationStringency(ValidationStringency.SILENT);
+			SAMRecordIterator iter=inputSam.iterator();
+			
+			cache();
+			start();
+			
+			int block = 10000;
+			SAMRecord[] Qs = new SAMRecord[block];
+			SAMRecord temp = iter.next();
+			int k = 0;
+			allReads = 0;
+			int tag;
+			while ( temp!=null ) {
+				Qs[k] = temp;
+				temp = iter.hasNext() ? iter.next() : null;
+				k++;
+				tag = temp==null ? 0 : 
+					Integer.parseInt(temp.getReadName());
+				
+				if(k==block || temp==null || tag>=cursor) {
+					executor.submit(new Runnable() {
+						private SAMRecord[] sam;
+						@Override
+						public void run() {
+							// TODO Auto-generated method stub
+
+							int tag;
+							Tag tagObj;
+							String taxa;
+							for(int i=0; i<sam.length; i++) {
+								try {
+									if(sam[i]==null)
+										break;
+									synchronized(lock) {
+										allReads++;
+									}
+
+									tag = Integer.parseInt(sam[i].getReadName());
+									if (allReads % 1000000 == 0) 
+										myLogger.info("Total Reads:" + allReads);
+									synchronized(lock) {
+										tagObj = indexMap.get(tag);
+										//if(tagObj==null) continue;
+										for(int t=0; t<tagObj.taxa.length; t++) {
+											taxa = tagObj.taxa[t];
+											if(!bam_writers.containsKey(taxa)) { 
+												bam_writers.put(taxa, 
+														new SAMFileWriterFactory().
+														makeSAMOrBAMWriter(header_sam,
+																true, new File(myOutputDir+
+																		System.getProperty("file.separator")+
+																		taxa+".bam")));
+											}
+
+											for(int r=0; r++<tagObj.count[t];)
+												bam_writers.get(taxa).addAlignment(sam[i]);
+										}
+									}
+								} catch (Exception e) {
+									Thread t = Thread.currentThread();
+									t.getUncaughtExceptionHandler().uncaughtException(t, e);
+									e.printStackTrace();
+									executor.shutdown();
+									System.exit(1);
+								}
+							}
+						}
+
+						public Runnable init(SAMRecord[] sam) {
+							this.sam = sam;
+							return(this);
+						}
+					}.init(Qs));
+					
+					k=0;
+					Qs = new SAMRecord[block];
+					if(temp==null || tag>=cursor) {
+						executor.shutdown();
+						executor.awaitTermination(365, TimeUnit.DAYS);
+						if(temp!=null) {
+							cache();
+							start();
+						}
+					}
+				}
+			}
+			iter.close();
+			inputSam.close();
+			//executor.shutdown();
+			//executor.awaitTermination(365, TimeUnit.DAYS);
+			for(String key : bam_writers.keySet())
+				bam_writers.get(key).close();
+			myLogger.info("Total number of reads in lane=" + allReads);
+			myLogger.info("Process took " + (System.currentTimeMillis() - start)/1000 + " seconds.");
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private void distributeUnsortedBam() {
+		// TODO Auto-generated method stub
+		
+	}
+	
+	private void distributeSortedSam() {
 		// TODO Auto-generated method stub
 		long start = System.currentTimeMillis();
 		try {
@@ -245,7 +388,7 @@ public class SamToTaxaPlugin {
 			while( (temp= br.readLine())!=null && 
 					temp.startsWith("@")) 
 				sb.append(temp+"\n");
-			header = sb.toString();
+			header_str = sb.toString();
 			int tag;
 			while ( temp != null ) {
 				Qs[k] = temp;
@@ -282,16 +425,16 @@ public class SamToTaxaPlugin {
 										//if(tagObj==null) continue;
 										for(int t=0; t<tagObj.taxa.length; t++) {
 											taxa = tagObj.taxa[t];
-											if(!writers.containsKey(taxa)) { 
-												writers.put(taxa, Utils.getBufferedWriter(
+											if(!sam_writers.containsKey(taxa)) { 
+												sam_writers.put(taxa, Utils.getBufferedWriter(
 														myOutputDir+
 														System.getProperty("file.separator")+
 														taxa+".sam"));
-												writers.get(taxa).write(header);
+												sam_writers.get(taxa).write(header_str);
 											}
 
 											for(int r=0; r++<tagObj.count[t];)
-												writers.get(taxa).write(sam[i]+"\n");
+												sam_writers.get(taxa).write(sam[i]+"\n");
 										}
 									}
 								} catch (Exception e) {
@@ -325,8 +468,8 @@ public class SamToTaxaPlugin {
 			br.close();
 			//executor.shutdown();
 			//executor.awaitTermination(365, TimeUnit.DAYS);
-			for(String key : writers.keySet())
-				writers.get(key).close();
+			for(String key : sam_writers.keySet())
+				sam_writers.get(key).close();
 			myLogger.info("Total number of reads in lane=" + allReads);
 			myLogger.info("Process took " + (System.currentTimeMillis() - start)/1000 + " seconds.");
 		} catch (Exception e) {
@@ -334,7 +477,7 @@ public class SamToTaxaPlugin {
 		}
 	}
 
-	public void distributeUnsortedTags() {
+	public void distributeUnsortedSam() {
 
 		long start = System.currentTimeMillis();
 		//executor = Executors.newFixedThreadPool(THREADS);
@@ -406,7 +549,7 @@ public class SamToTaxaPlugin {
 			while( (temp= br.readLine())!=null && 
 					temp.startsWith("@")) 
 				sb.append(temp+"\n");
-			header = sb.toString();
+			header_str = sb.toString();
 
 			while ( temp != null ) {
 				Qs[k] = temp;
@@ -440,16 +583,16 @@ public class SamToTaxaPlugin {
 										//if(tagObj==null) continue;
 										for(int t=0; t<tagObj.taxa.length; t++) {
 											taxa = tagObj.taxa[t];
-											if(!writers.containsKey(taxa)) { 
-												writers.put(taxa, Utils.getBufferedWriter(
+											if(!sam_writers.containsKey(taxa)) { 
+												sam_writers.put(taxa, Utils.getBufferedWriter(
 														myOutputDir+
 														System.getProperty("file.separator")+
 														taxa+".sam"));
-												writers.get(taxa).write(header);
+												sam_writers.get(taxa).write(header_str);
 											}
 
 											for(int r=0; r++<tagObj.count[t];)
-												writers.get(taxa).write(sam[i]+"\n");
+												sam_writers.get(taxa).write(sam[i]+"\n");
 										}
 									}
 								} catch (Exception e) {
@@ -474,8 +617,8 @@ public class SamToTaxaPlugin {
 			br.close();
 			executor.shutdown();
 			executor.awaitTermination(365, TimeUnit.DAYS);
-			for(String key : writers.keySet())
-				writers.get(key).close();
+			for(String key : sam_writers.keySet())
+				sam_writers.get(key).close();
 			myLogger.info("Total number of reads in lane=" + allReads);
 			myLogger.info("Process took " + (System.currentTimeMillis() - start)/1000 + " seconds.");
 		} catch (Exception e) {

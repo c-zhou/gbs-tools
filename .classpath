@@ -6,6 +6,6 @@
 	<classpathentry kind="lib" path="C:/Users/chenxi.zhou/Documents/git/gbs-tools/lib/commons-lang3-3.4.jar"/>
 	<classpathentry kind="lib" path="C:/Users/chenxi.zhou/Documents/git/gbs-tools/lib/log4j-1.2.13.jar"/>
 	<classpathentry kind="lib" path="C:/Users/chenxi.zhou/Documents/git/gbs-tools/lib/PedigreeSim.jar"/>
-	<classpathentry kind="lib" path="C:/Users/chenxi.zhou/Documents/git/gbs-tools/lib/picard-1.102.0.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/picard"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

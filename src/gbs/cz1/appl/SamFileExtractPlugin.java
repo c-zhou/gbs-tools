@@ -93,6 +93,7 @@ public class SamFileExtractPlugin {
 	public void extract() {
 		
 		final SAMFileReader inputSam = new SAMFileReader(new File(bam_in));
+		inputSam.setValidationStringency(ValidationStringency.SILENT);
 		final SAMFileHeader header = inputSam.getFileHeader();
 		final SAMSequenceDictionary seqdic = header.getSequenceDictionary();
 		final SAMFileHeader header_out = new SAMFileHeader();
@@ -131,7 +132,8 @@ public class SamFileExtractPlugin {
 						true, new File(bam_out));
 		while(iter.hasNext()) {
 			SAMRecord rec=iter.next();
-			if(extract.contains(rec.getReferenceName())) outputSam.addAlignment(rec);
+			if(extract.contains(rec.getReferenceName())) 
+				outputSam.addAlignment(rec);
 		}
 		iter.close();
 		inputSam.close();

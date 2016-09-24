@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.log4j.BasicConfigurator;
@@ -17,8 +18,12 @@ import net.sf.samtools.SAMFileReader;
 import net.sf.samtools.SAMFileReader.ValidationStringency;
 import net.sf.samtools.SAMFileWriter;
 import net.sf.samtools.SAMFileWriterFactory;
+import net.sf.samtools.SAMProgramRecord;
+import net.sf.samtools.SAMReadGroupRecord;
 import net.sf.samtools.SAMRecord;
 import net.sf.samtools.SAMRecordIterator;
+import net.sf.samtools.SAMSequenceDictionary;
+import net.sf.samtools.SAMSequenceRecord;
 
 
 public class SamFileExtractPlugin {
@@ -60,7 +65,7 @@ public class SamFileExtractPlugin {
 			myArgsEngine = new ArgsEngine();
 			myArgsEngine.add("-i", "--input-file", true);
 			myArgsEngine.add("-b", "--bed-dir", true);
-			myArgsEngine.add("-o", "--output-dir", true);
+			myArgsEngine.add("-o", "--output-file", true);
 			myArgsEngine.parse(args);
 		}
 
@@ -89,15 +94,16 @@ public class SamFileExtractPlugin {
 		
 		final SAMFileReader inputSam = new SAMFileReader(new File(bam_in));
 		final SAMFileHeader header = inputSam.getFileHeader();
+		final SAMSequenceDictionary seqdic = header.getSequenceDictionary();
+		final SAMFileHeader header_out = new SAMFileHeader();
+		final SAMSequenceDictionary seqdic_out = new SAMSequenceDictionary();
+		
 		inputSam.setValidationStringency(ValidationStringency.SILENT);
 		SAMRecordIterator iter=inputSam.iterator();
 
 		File bed_file = new File(bed_in);
-		String out = new File(bam_in).getName().split("\\.")[0];
-		final SAMFileWriter	outputSam = new SAMFileWriterFactory().
-				makeSAMOrBAMWriter(header,
-						true, new File(bam_out+file_sep+out+".bam"));
-		Set<String> extract = new HashSet<String>();
+		
+		final Set<String> extract = new HashSet<String>();
 		try (BufferedReader br = new BufferedReader(
 				new FileReader(bed_file))) {
 			String line;
@@ -108,6 +114,21 @@ public class SamFileExtractPlugin {
 			System.exit(1);
 		}
 		
+		header_out.setAttribute("VN", header.getAttribute("VN"));
+		header_out.setAttribute("SO", header.getAttribute("SO"));
+		List<SAMSequenceRecord> seqs = seqdic.getSequences();
+		for(SAMSequenceRecord seq : seqs)
+			if(extract.contains(seq.getSequenceName()))
+				seqdic_out.addSequence(seq);
+		header_out.setSequenceDictionary(seqdic_out);
+		for(SAMReadGroupRecord rg : header.getReadGroups())
+			header_out.addReadGroup(rg);
+		for(SAMProgramRecord pg : header.getProgramRecords())
+			header_out.addProgramRecord(pg);
+		
+		final SAMFileWriter	outputSam = new SAMFileWriterFactory().
+				makeSAMOrBAMWriter(header_out,
+						true, new File(bam_out));
 		while(iter.hasNext()) {
 			SAMRecord rec=iter.next();
 			if(extract.contains(rec.getReferenceName())) outputSam.addAlignment(rec);

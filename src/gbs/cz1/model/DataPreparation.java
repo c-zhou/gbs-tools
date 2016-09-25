@@ -1,4 +1,4 @@
-package gbs.cz1.core;
+package gbs.cz1.model;
 
 import gbs.cz1.util.ArgsEngine;
 

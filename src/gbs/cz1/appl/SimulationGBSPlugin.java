@@ -1,6 +1,6 @@
 package gbs.cz1.appl;
 
-import gbs.cz1.core.DataPreparation;
+import gbs.cz1.model.DataPreparation;
 import gbs.cz1.model.Digest;
 import gbs.cz1.model.Enzyme;
 import gbs.cz1.util.ArgsEngine;

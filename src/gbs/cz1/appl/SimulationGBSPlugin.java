@@ -87,7 +87,7 @@ public class SimulationGBSPlugin {
 	private static long RANDOM_SEED = System.nanoTime(); //112019890314L;
 	private String GBSOutputDir;
 	private String GBSFastqFilePath;
-	private BufferedWriter GBSFastqFileBufferedWriter;
+	//private BufferedWriter GBSFastqFileBufferedWriter;
 	private String flowcell;
 	private String lane;
 	private String libraryPlate;
@@ -237,7 +237,7 @@ public class SimulationGBSPlugin {
 		this.random = new Random(RANDOM_SEED);
 		setLibarayPreparation(libPrepFilePath);
 		this.GBSOutputDir = outputDir;
-		this.GBSFastqFilePath = outputDir+SEP+flowcell+"_"+lane+"_fastq.gz";
+		this.GBSFastqFilePath = outputDir+SEP+flowcell+"_"+lane+"_fastq";
 		this.probabilityBaseMissingInitialization = new double[readLength];
 		this.probabilityBaseMissingSucceeding = new double[readLength];
 		int[][] baseQualityCumsum = new int[readLength][QUAL_SCORE.length()];
@@ -476,7 +476,7 @@ public class SimulationGBSPlugin {
 	public void simulate() {
 
 		try {
-			GBSFastqFileBufferedWriter = getGZIPBufferedWriter(GBSFastqFilePath);
+			//GBSFastqFileBufferedWriter = getGZIPBufferedWriter(GBSFastqFilePath);
 			this.initial_thread_pool();
 			for(int f=0; f<fastaFileList.size(); f++) {
 				executor.submit(new Runnable() {
@@ -484,6 +484,7 @@ public class SimulationGBSPlugin {
 
 					@Override
 					public void run() {
+						
 						String name, line, fastaFilePath;
 						ArrayList<Integer> cut, recognization;
 						StringBuilder chromosome;
@@ -493,6 +494,8 @@ public class SimulationGBSPlugin {
 						fastaFilePath = fastaFileList.get(f);
 						StringBuilder oos = new StringBuilder();
 						try{
+							BufferedWriter GBSFastqFileBufferedWriter = getGZIPBufferedWriter(
+									GBSFastqFilePath+"_"+f+".gz", 65536);
 							BufferedReader br = getBufferedReader(fastaFilePath);
 							line = br.readLine();
 							while( line != null ) {
@@ -563,6 +566,7 @@ public class SimulationGBSPlugin {
 								System.out.println(getSystemTime()+">>> "+name+" done.");
 							}
 							br.close();
+							GBSFastqFileBufferedWriter.close();
 						} catch (IOException e) {
 							e.printStackTrace();
 							System.exit(1);
@@ -577,8 +581,9 @@ public class SimulationGBSPlugin {
 			}
 			executor.shutdown();
 			executor.awaitTermination(365, TimeUnit.DAYS);
-			GBSFastqFileBufferedWriter.close();
-		} catch (IOException | InterruptedException e) {
+			//GBSFastqFileBufferedWriter.close();
+		//} catch (IOException | InterruptedException e) {
+		} catch (InterruptedException e) {
 			e.printStackTrace();
 			System.exit(1);
 		}
@@ -663,12 +668,12 @@ public class SimulationGBSPlugin {
 		writer.write(fastq.quality+NLS);
 	}
 
-	public void writeFastqRead(FastqRead fastq) throws IOException {
-		GBSFastqFileBufferedWriter.write(fastq.identifier+NLS);
-		GBSFastqFileBufferedWriter.write(fastq.sequence+NLS);
-		GBSFastqFileBufferedWriter.write(fastq.plus+NLS);
-		GBSFastqFileBufferedWriter.write(fastq.quality+NLS);
-	}
+	//public void writeFastqRead(FastqRead fastq) throws IOException {
+	//	GBSFastqFileBufferedWriter.write(fastq.identifier+NLS);
+	//	GBSFastqFileBufferedWriter.write(fastq.sequence+NLS);
+	//	GBSFastqFileBufferedWriter.write(fastq.plus+NLS);
+	//	GBSFastqFileBufferedWriter.write(fastq.quality+NLS);
+	//}
 
 	public BufferedReader getBufferedReader(String path) throws IOException {
 		BufferedReader br = null;
@@ -691,6 +696,12 @@ public class SimulationGBSPlugin {
 		return new BufferedWriter(new OutputStreamWriter(new
 				GZIPOutputStream(new FileOutputStream(path))));
 	}
+	
+	public BufferedWriter getGZIPBufferedWriter(String path, int size) throws IOException {
+		return new BufferedWriter(new OutputStreamWriter(new
+				GZIPOutputStream(new FileOutputStream(path))), size);
+	}
+
 
 	public static String getSystemTime(){
 		return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").

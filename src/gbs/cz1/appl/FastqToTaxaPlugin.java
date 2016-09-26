@@ -281,7 +281,7 @@ public class FastqToTaxaPlugin {
                 BufferedReader br = Utils.getBufferedReader(fastqFiles[laneNum], 65536);
 
                 
-                int block = 10000;
+                int block = 1000000;
                 String[][] Qs = new String[block][2];
                 int k = 0;
                 allReads = 0;
@@ -310,17 +310,21 @@ public class FastqToTaxaPlugin {
                     		private String[][] fastq;
 							@Override
 							public void run() {
-								
 								// TODO Auto-generated method stub
+								
+								final Map<BitSet, short[]> block_tagCounts = 
+										new HashMap<BitSet, short[]>();
+								int block_allReads = 0, block_goodBarcodedReads = 0;
 								ReadBarcodeResult rr = null;
 								BitSet key;
 								for(int i=0; i<fastq.length; i++) {
 									try {
 										if(fastq[i][0]==null)
 											break;
-										synchronized(lock) {
-											allReads++;
-										}
+										//synchronized(lock) {
+										//	allReads++;
+										//}
+										block_allReads++;
 										
 										outerloop:
 										for(int j=0; j<myLeadingTrim.length; j++) {
@@ -335,6 +339,7 @@ public class FastqToTaxaPlugin {
 
 										if(rr!=null) {
 											key = rr.read;
+											/**
 											synchronized(lock) {
 												goodBarcodedReads++;
 												if (allReads % 1000000 == 0) {
@@ -348,6 +353,12 @@ public class FastqToTaxaPlugin {
 												}
 												tagCounts.get(key)[rr.taxonId]++;
 											}
+											**/
+											block_goodBarcodedReads++;
+											if(!block_tagCounts.containsKey(key)) {
+												block_tagCounts.put(key, new short[n]);
+											}
+											block_tagCounts.get(key)[rr.taxonId]++;
 										} else {
 											if(badReads_recorder!=null)
 												badReads_recorder.write(fastq[i][0]+"\n");
@@ -358,6 +369,24 @@ public class FastqToTaxaPlugin {
 										e.printStackTrace();
 										executor.shutdown();
 										System.exit(1);
+									}
+								}
+								
+								synchronized(lock) {
+									allReads += block_allReads;
+									goodBarcodedReads += block_goodBarcodedReads;
+									//myLogger.info("Total Reads:" + allReads + 
+									//		" Reads with barcode and cut site overhang:" + 
+									//		goodBarcodedReads);
+									for(BitSet bs : block_tagCounts.keySet()) {
+										if(!tagCounts.containsKey(bs)) {
+											tags++;
+											tagCounts.put(bs, block_tagCounts.get(bs));
+										} else {
+											short[] copy = tagCounts.get(bs);
+											short[] block_copy = block_tagCounts.get(bs);
+											for(int i=0; i<n; i++) copy[i] += block_copy[i];
+										}
 									}
 								}
 							}
@@ -439,7 +468,7 @@ public class FastqToTaxaPlugin {
 				GZIPOutputStream(new FileOutputStream(
 						myOutputDir+
 						System.getProperty("file.separator")+
-						output))));
+						output))), 65536);
 		//BufferedWriter bw = new BufferedWriter(new FileWriter(countFileNames[laneNum]));
 		bw.write("#Tag");
 		for(String taxon : taxa) bw.write("\t"+taxon);

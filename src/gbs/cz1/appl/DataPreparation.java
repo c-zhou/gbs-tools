@@ -1,6 +1,7 @@
-package gbs.cz1.model;
+package gbs.cz1.appl;
 
 import gbs.cz1.util.ArgsEngine;
+import gbs.cz1.util.Utils;
 
 import java.io.File;
 import java.io.FileReader;
@@ -56,13 +57,13 @@ public class DataPreparation {
 	public final static String SEP = System.getProperty("file.separator");
 	public final static long HGB = 3079843747L; //human genome base pairs
 	//mean and sd of base pairs across human chromosomes
-	public final static long MEAN = 128326823L;
+	public final static long MEAN = 128326823L; 
 	public final static long SD = 58070837L;
 	//estimated variations in human genome
 	public final static long VARIATIONS = 55757749L;
 	//decide the percentage of VARIATIONS (SNPs) that the two parents carries
 	private final static double[] POISSON_MIXTURE_LAMBDA = 
-			new double[] {50, 100, 200, 500, 1000, 2000, 5000};
+			new double[] {100, 200, 500, 1000, 2000, 5000, 10000};
 	private final static double[] POISSON_MIXTURE_PROBS = 
 			new double[] {.05, .1, .2, .3, .2, .1, .05};
 	private final static double PROBS_PRECISION = 1e-4;
@@ -180,8 +181,7 @@ public class DataPreparation {
 		this.popData = PedigreeSimulate.simulate(filePath+SEP+scenario+".par");
 	}
 
-	public DataPreparation(String[] args) throws Exception {
-		this.setParameters(args);
+	public DataPreparation() throws Exception {
 		this.genome = generatePrimitiveCHROM(this.REFERENCE,this.CHROM_NUMBER);
 		this.pedigree = generatePedigree(this.PROGENY_NUMBER);
 		this.chromosome = generateChromosome();
@@ -257,7 +257,7 @@ public class DataPreparation {
 	}
 
 	public static void main(String[] args) throws Exception {
-		DataPreparation dp = new DataPreparation(args);
+		DataPreparation dp = new DataPreparation();
 		dp.writeGenomeFile();
 		dp.writeGenomeFileAll();
 	}
@@ -414,8 +414,8 @@ public class DataPreparation {
 					String str2write;
 
 					Individual indiv =  popData.getIndiv(i);
-					try(BufferedWriter bw = getGZIPBufferedWriter(filePath+SEP+scenario+
-							indiv.getIndivName()+".fasta.gz")) {
+					try(BufferedWriter bw = getBufferedWriter(filePath+SEP+scenario+
+							indiv.getIndivName()+".fasta")) {
 						for (int c=0; c<N; c++) {
 							Chromosome chrom = popData.getChrom(c);
 							loci = chrom.getLocus();

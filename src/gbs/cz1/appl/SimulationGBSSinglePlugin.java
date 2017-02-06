@@ -36,7 +36,7 @@ import java.util.Collections;
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Logger;
 
-public class SimulationGBSPlugin {
+public class SimulationGBSSinglePlugin {
 
 	private final static Logger myLogger = 
 			Logger.getLogger(DataPreparation.class);
@@ -97,6 +97,7 @@ public class SimulationGBSPlugin {
 	private String dnaPlate;
 	private String genus;
 	private String species;
+	private static int sim_sample_index = -1;
 
 	private int THREADS = 1;
 	private static ExecutorService executor;
@@ -159,6 +160,7 @@ public class SimulationGBSPlugin {
 			myArgsEngine.add("-t", "--threads", true);
 			myArgsEngine.add("-b", "--barcode-file", true);
 			myArgsEngine.add("-s", "--random-seed", true);
+			myArgsEngine.add("-i", "--sim-sample-index", true);
 			myArgsEngine.add("-o", "--output-file", true);
 			myArgsEngine.parse(args);
 		}
@@ -203,17 +205,21 @@ public class SimulationGBSPlugin {
 			this.THREADS = Integer.parseInt(myArgsEngine.getString("-t"));
 		}
 
+		if (myArgsEngine.getBoolean("-i")) {
+			sim_sample_index = Integer.parseInt(myArgsEngine.getString("-i"));
+		}
+
 		if (myArgsEngine.getBoolean("-s")) {
 			RANDOM_SEED = Long.parseLong(myArgsEngine.getString("-s"));
 		}
 	}
 	
 	public static void main(String[] args) {
-		SimulationGBSPlugin sim = new SimulationGBSPlugin(args);
+		SimulationGBSSinglePlugin sim = new SimulationGBSSinglePlugin(args);
 		sim.simulate();
 	}
 
-	public SimulationGBSPlugin(String[] args) {
+	public SimulationGBSSinglePlugin(String[] args) {
 		setParameters(args);
 		/***
         meanDepth = 6.0;
@@ -424,7 +430,7 @@ public class SimulationGBSPlugin {
 			//barcodeGenerator.runBarcodeGenerator();
 			//BufferedReader br = getBufferedReader("barcode_list.txt");
 			BufferedReader br = getBufferedReader(barcodeFilePath);
-			BufferedWriter bw = getBufferedWriter(GBSOutputDir+SEP+flowcell+"_"+lane+"_key.txt");
+			BufferedWriter bw = getBufferedWriter(GBSOutputDir+SEP+flowcell+"_"+lane+"_key_"+sim_sample_index+".txt");
 			bw.write("Flowcell\tLane\tBarcode\tDNASample\tLibraryPlate\tRow\tCol\t"+
 					"LibraryPrepID\tLibraryPlateID\tEnzyme\tBarcodeWell\tDNA_Plate\t"+
 					"SampleDNA_Well\tGenus\tSpecies\tPedigree\tPopulation\tSeedLot "+
@@ -497,118 +503,101 @@ public class SimulationGBSPlugin {
 
 		try {
 			//GBSFastqFileBufferedWriter = getGZIPBufferedWriter(GBSFastqFilePath);
-			this.initial_thread_pool();
-			for(int f=0; f<fastaFileList.size(); f++) {
-				executor.submit(new Runnable() {
-					private int f;
+			String name, line, fastaFilePath;
+			ArrayList<Integer> cut, recognization;
+			StringBuilder chromosome;
+			FastqRead fastq;
+			int l;
+			Digest digestion;
+			fastaFilePath = fastaFileList.get(sim_sample_index);
+			StringBuilder oos = new StringBuilder();
+			//try{
+			BufferedWriter GBSFastqFileBufferedWriter = getGZIPBufferedWriter(
+					GBSFastqFilePath+"_"+sim_sample_index+".gz", 65536);
+			BufferedReader br = getBufferedReader(fastaFilePath);
+			line = br.readLine();
+			while( line != null ) {
+				name = parseSampleName(fastaFilePath)+"|"+line.replaceFirst(">","");
+				chromosome = new StringBuilder();
+				while( (line=br.readLine()) !=null && !line.startsWith(">") ) {
+					chromosome.append(line);
+				}
+				l = chromosome.length();
 
-					@Override
-					public void run() {
-						
-						String name, line, fastaFilePath;
-						ArrayList<Integer> cut, recognization;
-						StringBuilder chromosome;
-						FastqRead fastq;
-						int l;
-						Digest digestion;
-						fastaFilePath = fastaFileList.get(f);
-						StringBuilder oos = new StringBuilder();
-						try{
-							BufferedWriter GBSFastqFileBufferedWriter = getGZIPBufferedWriter(
-									GBSFastqFilePath+"_"+f+".gz", 65536);
-							BufferedReader br = getBufferedReader(fastaFilePath);
-							line = br.readLine();
-							while( line != null ) {
-								name = parseSampleName(fastaFilePath)+"|"+line.replaceFirst(">","");
-								chromosome = new StringBuilder();
-								while( (line=br.readLine()) !=null && !line.startsWith(">") ) {
-									chromosome.append(line);
-								}
-								l = chromosome.length();
+				//System.out.println(getSystemTime()+">>> digest starting...");
+				digestion = new Digest(enzyme, chromosome.toString());
+				//System.out.println(getSystemTime()+">>> done.");
+				cut = digestion.getCutsite();
+				recognization = digestion.getRecognization();
 
-								//System.out.println(getSystemTime()+">>> digest starting...");
-								digestion = new Digest(enzyme, chromosome.toString());
-								//System.out.println(getSystemTime()+">>> done.");
-								cut = digestion.getCutsite();
-								recognization = digestion.getRecognization();
-
-								//System.out.println(getSystemTime()+">>> simulate starting...");
-								// simulate 5'-3' end genome
-								int coverage;
-								for(int i=2; i<cut.size(); i++) {
-									if(cut.get(i)-cut.get(i-1)<MIN_FRAGMENT_SIZE) continue;
-									coverage = (int) Math.round(meanDepth+random.nextGaussian()*sdDepth);
-									for(int j=0; j<coverage; j++) {
-										fastq = generateFastqRead(chromosome.substring(cut.get(i-1),cut.get(i)), 
-												recognization.get(i-1),
-												fastaFileBarcodeMap.get(fastaFilePath), 
-												"@"+name+"|"+cut.get(i-1)+"|"+j, false);
-										//writeFastqRead(fastq);
-										oos.setLength(0);
-										oos.append(fastq.identifier);
-										oos.append(NLS);
-										oos.append(fastq.sequence);
-										oos.append(NLS);
-										oos.append(fastq.plus);
-										oos.append(NLS);
-										oos.append(fastq.quality);
-										oos.append(NLS);
-										GBSFastqFileBufferedWriter.write(oos.toString());
-									}
-								}
-
-								// simulate reverse complementary genome
-								chromosome.reverse();
-								for(int i=0; i<l; i++) 
-									chromosome.setCharAt(i,baseComplementaryMap.get(chromosome.charAt(i)));
-								for(int i=0; i<cut.size(); i++) cut.set(i,l-cut.get(i));
-								Collections.reverse(cut);
-								for(int i=2; i<cut.size(); i++) {
-									if(cut.get(i)-cut.get(i-1)<MIN_FRAGMENT_SIZE) continue;
-									coverage = (int) Math.round(meanDepth+random.nextGaussian()*sdDepth);
-									for(int j=0; j<coverage; j++) {
-										fastq = generateFastqRead(chromosome.substring(cut.get(i-1),cut.get(i)), 
-												recognization.get(i-1),
-												fastaFileBarcodeMap.get(fastaFilePath), 
-												"@"+name+"|"+cut.get(i-1)+"|1", true);
-										//writeFastqRead(fastq);
-										oos.setLength(0);
-										oos.append(fastq.identifier);
-										oos.append(NLS);
-										oos.append(fastq.sequence);
-										oos.append(NLS);
-										oos.append(fastq.plus);
-										oos.append(NLS);
-										oos.append(fastq.quality);
-										oos.append(NLS);
-										GBSFastqFileBufferedWriter.write(oos.toString());
-									}
-								}
-								//System.out.println(getSystemTime()+">>> done.");
-								System.out.println(getSystemTime()+">>> "+name+" done.");
-							}
-							br.close();
-							GBSFastqFileBufferedWriter.close();
-						} catch (IOException e) {
-							e.printStackTrace();
-							System.exit(1);
-						}
-
+				//System.out.println(getSystemTime()+">>> simulate starting...");
+				// simulate 5'-3' end genome
+				int coverage;
+				for(int i=2; i<cut.size(); i++) {
+					if(cut.get(i)-cut.get(i-1)<MIN_FRAGMENT_SIZE) continue;
+					coverage = (int) Math.round(meanDepth+random.nextGaussian()*sdDepth);
+					for(int j=0; j<coverage; j++) {
+						fastq = generateFastqRead(chromosome.substring(cut.get(i-1),cut.get(i)), 
+								recognization.get(i-1),
+								fastaFileBarcodeMap.get(fastaFilePath), 
+								"@"+name+"|"+cut.get(i-1)+"|"+j, false);
+						//writeFastqRead(fastq);
+						oos.setLength(0);
+						oos.append(fastq.identifier);
+						oos.append(NLS);
+						oos.append(fastq.sequence);
+						oos.append(NLS);
+						oos.append(fastq.plus);
+						oos.append(NLS);
+						oos.append(fastq.quality);
+						oos.append(NLS);
+						GBSFastqFileBufferedWriter.write(oos.toString());
 					}
-					public Runnable init(int f) {
-						this.f = f;
-						return(this);
+				}
+
+				// simulate reverse complementary genome
+				chromosome.reverse();
+				for(int i=0; i<l; i++) 
+					chromosome.setCharAt(i,baseComplementaryMap.get(chromosome.charAt(i)));
+				for(int i=0; i<cut.size(); i++) cut.set(i,l-cut.get(i));
+				Collections.reverse(cut);
+				for(int i=2; i<cut.size(); i++) {
+					if(cut.get(i)-cut.get(i-1)<MIN_FRAGMENT_SIZE) continue;
+					coverage = (int) Math.round(meanDepth+random.nextGaussian()*sdDepth);
+					for(int j=0; j<coverage; j++) {
+						fastq = generateFastqRead(chromosome.substring(cut.get(i-1),cut.get(i)), 
+								recognization.get(i-1),
+								fastaFileBarcodeMap.get(fastaFilePath), 
+								"@"+name+"|"+cut.get(i-1)+"|1", true);
+						//writeFastqRead(fastq);
+						oos.setLength(0);
+						oos.append(fastq.identifier);
+						oos.append(NLS);
+						oos.append(fastq.sequence);
+						oos.append(NLS);
+						oos.append(fastq.plus);
+						oos.append(NLS);
+						oos.append(fastq.quality);
+						oos.append(NLS);
+						GBSFastqFileBufferedWriter.write(oos.toString());
 					}
-				}.init(f) );
+				}
+				//System.out.println(getSystemTime()+">>> done.");
+				System.out.println(getSystemTime()+">>> "+name+" done.");
 			}
-			executor.shutdown();
-			executor.awaitTermination(365, TimeUnit.DAYS);
-			//GBSFastqFileBufferedWriter.close();
-		//} catch (IOException | InterruptedException e) {
-		} catch (InterruptedException e) {
+			br.close();
+			GBSFastqFileBufferedWriter.close();
+		} catch (IOException e) {
 			e.printStackTrace();
 			System.exit(1);
 		}
+
+		//GBSFastqFileBufferedWriter.close();
+		//} catch (IOException | InterruptedException e) {
+		//} catch (InterruptedException e) {
+		//	e.printStackTrace();
+		//	System.exit(1);
+		//}
 
 	}
 

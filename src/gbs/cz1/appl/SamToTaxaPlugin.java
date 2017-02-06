@@ -131,14 +131,14 @@ public class SamToTaxaPlugin {
 			new HashMap<String, BufferedWriter>();
 	private final static Map<String, SAMFileWriter> bam_writers = 
 			new HashMap<String, SAMFileWriter>();
-	private final static Map<Integer, Tag> indexMap = 
-			new ConcurrentHashMap<Integer, Tag>();
+	private final static Map<Long, Tag> indexMap = 
+			new ConcurrentHashMap<Long, Tag>();
 	private static BufferedReader indexReader = null;
-	private static int cursor = 0;
+	private static long cursor = 0;
 	private Object lock = new Object();
 	private static int THREADS = 1;
 	private static ExecutorService executor;
-	private static int allReads = 0;
+	private static long allReads = 0;
 	private BlockingQueue<Runnable> tasks = null;
 	private static String header_str = null;
 	private static SAMFileHeader header_sam = null;
@@ -209,12 +209,12 @@ public class SamToTaxaPlugin {
 						@Override
 						public void run() {
 							// TODO Auto-generated method stub
-							int tag;
+							long tag;
 							String[] s, taxa;
 							int[] count;
 							for(String x : index) {
 								s = x.split("\\s+");
-								tag = Integer.parseInt(s[0]);
+								tag = Long.parseLong(s[0]);
 								s = s[1].split("#|:");
 								taxa = new String[s.length/2];
 								count = new int[s.length/2];
@@ -269,13 +269,13 @@ public class SamToTaxaPlugin {
 			SAMRecord temp = iter.next();
 			int k = 0;
 			allReads = 0;
-			int tag;
+			long tag;
 			while ( temp!=null ) {
 				Qs[k] = temp;
 				temp = iter.hasNext() ? iter.next() : null;
 				k++;
 				tag = temp==null ? 0 : 
-					Integer.parseInt(temp.getReadName());
+					Long.parseLong(temp.getReadName());
 				
 				if(k==block || temp==null || tag>=cursor) {
 					executor.submit(new Runnable() {
@@ -284,7 +284,7 @@ public class SamToTaxaPlugin {
 						public void run() {
 							// TODO Auto-generated method stub
 
-							int tag;
+							long tag;
 							Tag tagObj;
 							String taxa;
 							for(int i=0; i<sam.length; i++) {
@@ -295,7 +295,7 @@ public class SamToTaxaPlugin {
 										allReads++;
 									}
 
-									tag = Integer.parseInt(sam[i].getReadName());
+									tag = Long.parseLong(sam[i].getReadName());
 									if (allReads % 1000000 == 0) 
 										myLogger.info("Total Reads:" + allReads);
 									synchronized(lock) {
@@ -389,13 +389,13 @@ public class SamToTaxaPlugin {
 					temp.startsWith("@")) 
 				sb.append(temp+"\n");
 			header_str = sb.toString();
-			int tag;
+			long tag;
 			while ( temp != null ) {
 				Qs[k] = temp;
 				temp = br.readLine();
 				k++;
 				tag = temp==null ? 0 : 
-					Integer.parseInt(temp.substring(0,10).
+					Long.parseLong(temp.substring(0,10).
 							split("\\s+",2)[0]);
 				if(k==block || temp==null || tag>=cursor) {
 
@@ -405,7 +405,7 @@ public class SamToTaxaPlugin {
 						public void run() {
 							// TODO Auto-generated method stub
 
-							int tag;
+							long tag;
 							Tag tagObj;
 							String taxa;
 							for(int i=0; i<sam.length; i++) {
@@ -416,7 +416,7 @@ public class SamToTaxaPlugin {
 										allReads++;
 									}
 
-									tag = Integer.parseInt(sam[i].substring(0,10).
+									tag = Long.parseLong(sam[i].substring(0,16).
 											split("\\s+",2)[0]);
 									if (allReads % 1000000 == 0) 
 										myLogger.info("Total Reads:" + allReads);
@@ -502,12 +502,12 @@ public class SamToTaxaPlugin {
 						@Override
 						public void run() {
 							// TODO Auto-generated method stub
-							int tag;
+							long tag;
 							String[] s, taxa;
 							int[] count;
 							for(String x : index) {
 								s = x.split("\\s+");
-								tag = Integer.parseInt(s[0]);
+								tag = Long.parseLong(s[0]);
 								s = s[1].split("#|:");
 								taxa = new String[s.length/2];
 								count = new int[s.length/2];
@@ -563,7 +563,7 @@ public class SamToTaxaPlugin {
 						public void run() {
 							// TODO Auto-generated method stub
 
-							int tag;
+							long tag;
 							Tag tagObj;
 							String taxa;
 							for(int i=0; i<sam.length; i++) {
@@ -574,7 +574,7 @@ public class SamToTaxaPlugin {
 										allReads++;
 									}
 
-									tag = Integer.parseInt(sam[i].substring(0,10).
+									tag = Long.parseLong(sam[i].substring(0,16).
 											split("\\s+",2)[0]);
 									if (allReads % 1000000 == 0) 
 										myLogger.info("Total Reads:" + allReads);

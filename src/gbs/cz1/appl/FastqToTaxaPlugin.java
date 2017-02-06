@@ -173,11 +173,11 @@ public class FastqToTaxaPlugin {
 	private Object lock = new Object();
 	private static int THREADS = 1;
 	private static ExecutorService executor;
-	private static int allReads = 0;
-    private static int goodBarcodedReads = 0;
+	private static long allReads = 0;
+    private static long goodBarcodedReads = 0;
     private static String os = null;
     private static int volume = 0; 
-    private static int tags = 0;
+    private static long tags = 0;
     private static ParseBarcodeRead[] thePBR;  // this reads the key file and store the expected barcodes for this lane
     private static String[] taxa; // taxa names
     private static int n; // number of taxa
@@ -281,7 +281,7 @@ public class FastqToTaxaPlugin {
                 BufferedReader br = Utils.getBufferedReader(fastqFiles[laneNum], 65536);
 
                 
-                int block = 1000000;
+                int block = 10000;
                 String[][] Qs = new String[block][2];
                 int k = 0;
                 allReads = 0;

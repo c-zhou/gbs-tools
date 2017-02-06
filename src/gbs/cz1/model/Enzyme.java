@@ -29,9 +29,13 @@ public class Enzyme {
                 this.recognizationSequence = new String[]{"CCGG"};
                 this.overhangLength = 3;
                 break;
+            case "tsei" :
+            	this.name = "TseI";
+            	this.recognizationSequence = new String[]{"GCAGC", "GCTGC"};
+            	this.overhangLength = 4;
+            	break;
             default:
-                System.out.println("Unrecognized enzyme. Program exit.");
-                System.exit(1);
+                throw new RuntimeException("Unrecognized enzyme. Program exit.");
         }
         int n = recognizationSequence.length;
         int l = recognizationSequence[0].length();
